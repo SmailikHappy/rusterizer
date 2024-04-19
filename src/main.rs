@@ -20,7 +20,7 @@ pub use transform::Transform;
 
 
 pub mod utils;
-use utils::{coords_to_index, map_to_range, /*cofactor, load_gltf*/};
+use utils::{coords_to_index, map_to_range, /*cofactor,*/ load_gltf};
 
 
 const WIDTH: usize = 500;
@@ -66,6 +66,11 @@ pub fn clear_buffer(buffer: &mut Vec<u32>) {
     *buffer = vec![0; length];
 }
 
+pub fn clear_z_buffer(buffer: &mut Vec<f32>) {
+    let length = buffer.len();
+    *buffer = vec![1.0; length];
+}
+
 // Area of paralellogram
 pub fn get_doubled_triangle_area(v0: glam::Vec2, v1: glam::Vec2, v2: glam::Vec2) -> f32 {
     let area = ((v1.x - v0.x) * (v2.y - v0.y)) - ((v1.y - v0.y) * (v2.x - v0.x));
@@ -75,6 +80,7 @@ pub fn get_doubled_triangle_area(v0: glam::Vec2, v1: glam::Vec2, v2: glam::Vec2)
 // main function which draws the color of pixels
 pub fn draw_pixel(
     buffer: &mut Vec<u32>,
+    z_buffer: &mut Vec<f32>,
     index: usize,
     x: f32, y: f32,
     sc0: Vec2,
@@ -93,6 +99,14 @@ pub fn draw_pixel(
     let w0 = get_doubled_triangle_area(p,   sc1, sc2) * reversed_global_area;
     let w1 = get_doubled_triangle_area(sc0, p,   sc2) * reversed_global_area;
     let w2 = get_doubled_triangle_area(sc0, sc1, p  ) * reversed_global_area;
+
+    let z = w0 * v0.pos.z + w1 * v1.pos.z + w2 * v2.pos.z;
+
+    let mut _a = 0;
+
+    if z_buffer[index] < z { return; }
+
+    z_buffer[index] = z;
 
     let correction = w0 * rec0 + w1 * rec1 + w2 * rec2;
     // 1/(1/z) = z
@@ -122,7 +136,7 @@ pub fn raster_triangle(
     mvp: &Mat4,
     texture: &Texture,
     buffer: &mut Vec<u32>,
-    // z_buffer: &mut Vec<f32>,
+    z_buffer: &mut Vec<f32>,
     viewport_size: Vec2,
 ) {
 
@@ -153,7 +167,18 @@ pub fn raster_triangle(
         v1.pos = clip1.xyz() * rec1;
         v2.pos = clip2.xyz() * rec2;
 
-        draw_triangle(buffer, v0, v1, v2, rec0, rec1, rec2, texture, viewport_size, mvp);
+        draw_triangle(
+            buffer,
+            z_buffer,
+            v0,
+            v1,
+            v2,
+            rec0,
+            rec1,
+            rec2,
+            texture,
+            viewport_size,
+            mvp);
         return;
     }
     else if num_of_vertices_behind == 1
@@ -201,6 +226,7 @@ pub fn raster_triangle(
 
         draw_triangle(
             buffer,
+            z_buffer,
             new_vertex0,
             vertex_to_stay0,
             new_vertex1,
@@ -213,6 +239,7 @@ pub fn raster_triangle(
 
         draw_triangle(
             buffer,
+            z_buffer,
             vertex_to_stay1,
             vertex_to_stay0,
             new_vertex1,
@@ -264,6 +291,7 @@ pub fn raster_triangle(
 
         draw_triangle(
             buffer,
+            z_buffer,
             new_vertex0,
             vertex_to_stay,
             new_vertex1,
@@ -282,6 +310,7 @@ pub fn raster_mesh(
     mvp: &Mat4,
     texture: &Texture,
     buffer: &mut Vec<u32>,
+    z_buffer: &mut Vec<f32>,
     viewport_size: Vec2,
 ) {
     for triangle in mesh.triangles() {
@@ -293,6 +322,7 @@ pub fn raster_mesh(
             mvp,
             texture,
             buffer,
+            z_buffer,
             viewport_size,
         );
     }
@@ -300,6 +330,7 @@ pub fn raster_mesh(
 
 pub fn draw_triangle(
     buffer: &mut Vec<u32>,
+    z_buffer: &mut Vec<f32>,
     clipped_v0: Vertex,
     clipped_v1: Vertex,
     clipped_v2: Vertex,
@@ -380,7 +411,7 @@ pub fn draw_triangle(
     }
 
     let min_x = (sc0.x.min(sc1.x.min(sc2.x)) as usize).max(0);
-    let max_x = (sc0.x.max(sc1.x.max(sc2.x)) as usize).min(WIDTH);
+    let max_x = (sc0.x.max(sc1.x.max(sc2.x)) as usize).min(WIDTH-1);
 
 
     let reversed_global_area = 1.0 / get_doubled_triangle_area(sc0, sc1, sc2);
@@ -404,7 +435,12 @@ pub fn draw_triangle(
                 let temporal_value = a*x_f32 - c;
                 while (b*y_f32 + temporal_value).signum() != b.signum() && (b*y_f32 + temporal_value != 0.0) && y_usize < HEIGHT{
                     let index = coords_to_index(x_usize, y_usize, WIDTH);
-                    draw_pixel(buffer, index, x_f32, y_f32, sc0, sc1, sc2, clipped_v0, clipped_v1, clipped_v2, rec0, rec1, rec2, reversed_global_area, texture);
+                    let mut _a = 0;
+                    if index >= WIDTH * HEIGHT
+                    {
+                        _a = 1;
+                    }
+                    draw_pixel(buffer, z_buffer, index, x_f32, y_f32, sc0, sc1, sc2, clipped_v0, clipped_v1, clipped_v2, rec0, rec1, rec2, reversed_global_area, texture);
                     y_f32 += 1.0;
                     y_usize += 1;
                 }
@@ -427,7 +463,12 @@ pub fn draw_triangle(
 
                 while (b*y_f32 + temporal_value).signum() == b.signum() && (b*y_f32 + temporal_value != 0.0) && y_usize > 0{
                     let index = coords_to_index(x_usize, y_usize, WIDTH);
-                    draw_pixel(buffer, index, x_f32, y_f32, sc0, sc1, sc2, clipped_v0, clipped_v1, clipped_v2, rec0, rec1, rec2, reversed_global_area, texture);
+                    let mut _a = 0;
+                    if index >= WIDTH * HEIGHT
+                    {
+                        _a = 1;
+                    }
+                    draw_pixel(buffer, z_buffer, index, x_f32, y_f32, sc0, sc1, sc2, clipped_v0, clipped_v1, clipped_v2, rec0, rec1, rec2, reversed_global_area, texture);
                     y_f32 -= 1.0;
                     y_usize -= 1;
                 }
@@ -444,15 +485,20 @@ pub fn draw_triangle(
                 let mut y_f32 = find_maximal_y(pivot_line0, pivot_line1, x_f32);
 
                 
-                y_f32 -= 0.5;
+                y_f32 -= 0.500001;
                 y_f32 = y_f32.round();
 
                 let mut y_usize = y_f32 as usize;
 
                 let temporal_value = a*x_f32 - c;
-                while (b*y_f32 + temporal_value).signum() != b.signum() && (b*y_f32 + temporal_value != 0.0) {
+                while (b*y_f32 + temporal_value).signum() != b.signum() && (b*y_f32 + temporal_value != 0.0) && y_usize < HEIGHT{
                     let index = coords_to_index(x_usize, y_usize, WIDTH);
-                    draw_pixel(buffer, index, x_f32, y_f32, sc0, sc1, sc2, clipped_v0, clipped_v1, clipped_v2, rec0, rec1, rec2, reversed_global_area, texture);
+                    let mut _a = 0;
+                    if index >= WIDTH * HEIGHT
+                    {
+                        _a = 1;
+                    }
+                    draw_pixel(buffer, z_buffer, index, x_f32, y_f32, sc0, sc1, sc2, clipped_v0, clipped_v1, clipped_v2, rec0, rec1, rec2, reversed_global_area, texture);
                     y_f32 += 1.0;
                     y_usize += 1;
                 }
@@ -473,9 +519,14 @@ pub fn draw_triangle(
 
                 let temporal_value = a*x_f32 - c;
 
-                while (b*y_f32 + temporal_value).signum() == b.signum() && (b*y_f32 + temporal_value != 0.0) {
+                while (b*y_f32 + temporal_value).signum() == b.signum() && (b*y_f32 + temporal_value != 0.0) && y_usize > 0{
                     let index = coords_to_index(x_usize, y_usize, WIDTH);
-                    draw_pixel(buffer, index, x_f32, y_f32, sc0, sc1, sc2, clipped_v0, clipped_v1, clipped_v2, rec0, rec1, rec2, reversed_global_area, texture);
+                    let mut _a = 0;
+                    if index >= WIDTH * HEIGHT
+                    {
+                        _a = 1;
+                    }
+                    draw_pixel(buffer, z_buffer, index, x_f32, y_f32, sc0, sc1, sc2, clipped_v0, clipped_v1, clipped_v2, rec0, rec1, rec2, reversed_global_area, texture);
                     y_f32 -= 1.0;
                     y_usize -= 1;
                 }
@@ -522,6 +573,7 @@ pub fn find_maximal_y(line0: (f32, f32, f32), line1: (f32, f32, f32), x: f32) ->
 
 fn main() {
     let mut buffer: Vec<u32> = vec![0; WIDTH * HEIGHT];
+    let mut z_buffer: Vec<f32> = vec![1.0; WIDTH * HEIGHT];
 
     let mut window = Window::new(
         "Test - ESC to exit",
@@ -533,24 +585,24 @@ fn main() {
         panic!("Window failed to load.\nCaused error: {}", e);
     });
 
-    let v0 = Vertex {
-        pos: glam::vec3(-1.0, 1.0, 0.0),
-        normal: glam::vec3(0.0, 1.0, 0.0),
-        c: glam::vec3(255.0, 235.0, 59.0),
-        uv: glam::vec2(1.0, 0.0),
-    };
-    let v1 = Vertex {
-        pos: glam::vec3(1.0, 1.0, 0.0),
-        normal: glam::vec3(0.0, 1.0, 0.0),
-        c: glam::vec3(0.0, 255.0, 0.0),
-        uv: glam::vec2(0.0, 0.0)
-    };
-    let v2 = Vertex {
-        pos: glam::vec3(-1.0, -1.0, 0.0),
-        normal: glam::vec3(0.0, 1.0, 0.0),
-        c: glam::vec3(0.0, 0.0, 255.0),
-        uv: glam::vec2(1.0, 1.0)
-    };
+    // let v0 = Vertex {
+    //     pos: glam::vec3(-1.0, 1.0, 0.0),
+    //     normal: glam::vec3(0.0, 1.0, 0.0),
+    //     c: glam::vec3(255.0, 235.0, 59.0),
+    //     uv: glam::vec2(1.0, 0.0),
+    // };
+    // let v1 = Vertex {
+    //     pos: glam::vec3(1.0, 1.0, 0.0),
+    //     normal: glam::vec3(0.0, 1.0, 0.0),
+    //     c: glam::vec3(0.0, 255.0, 0.0),
+    //     uv: glam::vec2(0.0, 0.0)
+    // };
+    // let v2 = Vertex {
+    //     pos: glam::vec3(-1.0, -1.0, 0.0),
+    //     normal: glam::vec3(0.0, 1.0, 0.0),
+    //     c: glam::vec3(0.0, 0.0, 255.0),
+    //     uv: glam::vec2(1.0, 1.0)
+    // };
     // let v3 = Vertex {
     //     pos: glam::vec3(1.0, -1.0, 0.0),
     //     normal: glam::vec3(0.0, 1.0, 0.0),
@@ -567,15 +619,15 @@ fn main() {
         ..Default::default()
     };
 
-    // let mesh = load_gltf(Path::new("assets/helmet.gltf"));
+    let mesh = load_gltf(Path::new("assets/helmet.gltf"));
     //let mesh = load_gltf(Path::new("assets/cube.gltf"));
 
     let transform_of_go = Transform::from_rotation(glam::Quat::from_euler(glam::EulerRot::XYZ, 0.0, 0.0, 0.0));
 
     //camera.transform.translation = glam::vec3(1.0, 1.0, 1.0);
 
-    // let texture = Texture::load(Path::new("assets/bojan.jpg"));
-    let texture = Texture::load(Path::new("assets/albedo.jpg"));
+    let texture = Texture::load(Path::new("assets/bojan.jpg"));
+    //let texture = Texture::load(Path::new("assets/albedo.jpg"));
 
     let window_size = glam::vec2(WIDTH as f32, HEIGHT as f32);
 
@@ -593,21 +645,23 @@ fn main() {
 
         handle_camera(&mut camera, &window, &mut mouse_pos, dt);
         clear_buffer(&mut buffer);
-        raster_triangle(
-            v0, v1, v2, &(camera.projection() * camera.view() * transform_of_go.local()), &texture, &mut buffer, window_size
-        );
+        clear_z_buffer(&mut z_buffer);
+        // raster_triangle(
+        //     v0, v1, v2, &(camera.projection() * camera.view() * transform_of_go.local()), &texture, &mut buffer, window_size
+        // );
         // raster_triangle(
         //     v1, v2, v3, &(camera.projection() * camera.view() * transform_of_go.local()), &texture, &mut buffer, window_size
         // );
 
-        // raster_mesh(
-        //     &mesh,
-        //     &transform_of_go.local(),
-        //     &(camera.projection() * camera.view() * transform_of_go.local()),
-        //     &texture,
-        //     &mut buffer,
-        //     window_size,
-        // );
+        raster_mesh(
+            &mesh,
+            &transform_of_go.local(),
+            &(camera.projection() * camera.view() * transform_of_go.local()),
+            &texture,
+            &mut buffer,
+            &mut z_buffer,
+            window_size,
+        );
 
         window.update_with_buffer(&buffer, WIDTH, HEIGHT).unwrap();
     }
