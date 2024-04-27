@@ -36,7 +36,7 @@ impl Texture {
     }
 
     pub fn argb_at_uv(&self, u: f32, v: f32) -> u32 {
-        let (u, v) = (u * self.width as f32, v * self.height as f32);
+        let (u, v) = ((u % 1.0) * self.width as f32, (v % 1.0) * self.height as f32);
         let id = coords_to_index(u as usize, v as usize, self.width);
         if id < self.data.len() {
             self.data[id]

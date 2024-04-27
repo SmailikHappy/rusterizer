@@ -20,12 +20,12 @@ pub use transform::Transform;
 
 
 pub mod utils;
-use utils::{coords_to_index, map_to_range, /*cofactor, load_gltf*/};
+use utils::{coords_to_index, map_to_range, /*cofactor,*/ load_gltf};
 
 
 const WIDTH: usize = 500;
 const HEIGHT: usize = 500;
-//const WIDTH_F: f32 = 500.0;
+const WIDTH_F: f32 = 500.0;
 const HEIGHT_F: f32 = 500.0;
 //const PI: f32 = 3.14159265359;
 
@@ -66,6 +66,11 @@ pub fn clear_buffer(buffer: &mut Vec<u32>) {
     *buffer = vec![0; length];
 }
 
+pub fn clear_z_buffer(buffer: &mut Vec<f32>) {
+    let length = buffer.len();
+    *buffer = vec![1.0; length];
+}
+
 // Area of paralellogram
 pub fn get_doubled_triangle_area(v0: glam::Vec2, v1: glam::Vec2, v2: glam::Vec2) -> f32 {
     let area = ((v1.x - v0.x) * (v2.y - v0.y)) - ((v1.y - v0.y) * (v2.x - v0.x));
@@ -75,6 +80,7 @@ pub fn get_doubled_triangle_area(v0: glam::Vec2, v1: glam::Vec2, v2: glam::Vec2)
 // main function which draws the color of pixels
 pub fn draw_pixel(
     buffer: &mut Vec<u32>,
+    z_buffer: &mut Vec<f32>,
     index: usize,
     x: f32, y: f32,
     sc0: Vec2,
@@ -93,6 +99,14 @@ pub fn draw_pixel(
     let w0 = get_doubled_triangle_area(p,   sc1, sc2) * reversed_global_area;
     let w1 = get_doubled_triangle_area(sc0, p,   sc2) * reversed_global_area;
     let w2 = get_doubled_triangle_area(sc0, sc1, p  ) * reversed_global_area;
+
+    let z = w0 * v0.pos.z + w1 * v1.pos.z + w2 * v2.pos.z;
+
+    let mut _a = 0;
+
+    if z_buffer[index] < z { return; }
+
+    z_buffer[index] = z;
 
     let correction = w0 * rec0 + w1 * rec1 + w2 * rec2;
     // 1/(1/z) = z
@@ -122,30 +136,13 @@ pub fn raster_triangle(
     mvp: &Mat4,
     texture: &Texture,
     buffer: &mut Vec<u32>,
-    // z_buffer: &mut Vec<f32>,
+    z_buffer: &mut Vec<f32>,
     viewport_size: Vec2,
 ) {
-    
-    // let mut clip_tri = triangle.transform(mvp);
-    // clip_tri.v0.normal = (cof_mat * clip_tri.v0.normal.extend(0.0)).xyz();
-    // clip_tri.v1.normal = (cof_mat * clip_tri.v1.normal.extend(0.0)).xyz();
-    // clip_tri.v2.normal = (cof_mat * clip_tri.v2.normal.extend(0.0)).xyz();
 
     let clip0 = *mvp * Vec4::from((v0.pos, 1.0));
     let clip1 = *mvp * Vec4::from((v1.pos, 1.0));
-    let clip2 = *mvp * Vec4::from((v2.pos, 1.0));
-    
-    // Check if the whole triangle is outside of clip space
-    if clip0.z < 0.0 && clip1.z < 0.0 && clip2.z < 0.0 { return; }
-    //println!("first passed");
-    //if clip0.x < -1.0 && clip1.x < -1.0 && clip2.x < -1.0 { return; }
-    //println!("second passed");
-    //if clip0.x > 1.0  && clip1.x > 1.0  && clip2.x > 1.0   { return; }
-    //println!("third passed");
-    //if clip0.y < -1.0 && clip1.y < -1.0 && clip2.y < -1.0 { return; }
-    //println!("fourth passed");
-    //if clip0.y > 1.0  && clip1.y > 1.0  && clip2.y > 1.0  { return; }
-    //println!("fith passed");
+    let clip2 = *mvp * Vec4::from((v2.pos, 1.0));    
 
     let mut num_of_vertices_behind:i8 = 0;
 
@@ -154,108 +151,157 @@ pub fn raster_triangle(
     if clip1.z < 0.0 { num_of_vertices_behind += 1; }
     if clip2.z < 0.0 { num_of_vertices_behind += 1; }
 
-    println!("{num_of_vertices_behind}");
-
-    let rec0 = 1.0 / clip0.w;
-    let rec1 = 1.0 / clip1.w;
-    let rec2 = 1.0 / clip2.w;
-
-    v0 = v0 * rec0;
-    v1 = v1 * rec1;
-    v2 = v2 * rec2;
-
-    // v0.pos = (clip0 * rec0).xyz();
-    // v1.pos = (clip1 * rec1).xyz();
-    // v2.pos = (clip2 * rec2).xyz();
-    
-    v0.pos = clip0.xyz();
-    v1.pos = clip1.xyz();
-    v2.pos = clip2.xyz();
+    if num_of_vertices_behind == 3 {println!("the triangle is outside of clip space"); return;}
 
     if num_of_vertices_behind == 0
     {
+        let rec0 = 1.0 / clip0.w;
+        let rec1 = 1.0 / clip1.w;
+        let rec2 = 1.0 / clip2.w;
+
+        v0 = v0 * rec0;
+        v1 = v1 * rec1;
+        v2 = v2 * rec2;
+
         v0.pos = clip0.xyz() * rec0;
         v1.pos = clip1.xyz() * rec1;
         v2.pos = clip2.xyz() * rec2;
 
-        draw_triangle(buffer, v0, v1, v2, rec0, rec1, rec2, texture, viewport_size, mvp);
+        draw_triangle(
+            buffer,
+            z_buffer,
+            v0,
+            v1,
+            v2,
+            rec0,
+            rec1,
+            rec2,
+            texture,
+            viewport_size,
+            mvp);
         return;
     }
     else if num_of_vertices_behind == 1
     {
-        let vertex_to_slice: Vertex;
-        let rec_of_slice: f32;
+        let     vertex_to_slice: Vertex;
+        let     clip_of_slice: Vec4;
         let mut vertex_to_stay0: Vertex;
-        let rec_of_stay0: f32;
+        let     clip_of_stay0: Vec4;
         let mut vertex_to_stay1: Vertex;
-        let rec_of_stay1: f32;
+        let     clip_of_stay1: Vec4;
 
-        if v0.pos.z < 0.0       { vertex_to_slice = v0; rec_of_slice = rec0; vertex_to_stay0 = v1; rec_of_stay0 = rec1; vertex_to_stay1 = v2; rec_of_stay1 = rec2; }
-        else if v1.pos.z < 0.0  { vertex_to_slice = v1; rec_of_slice = rec1; vertex_to_stay0 = v0; rec_of_stay0 = rec0; vertex_to_stay1 = v2; rec_of_stay1 = rec2; }
-        else                    { vertex_to_slice = v2; rec_of_slice = rec2; vertex_to_stay0 = v1; rec_of_stay0 = rec1; vertex_to_stay1 = v0; rec_of_stay1 = rec0; }
+        // Checking which vertex to slice
+        if clip0.z < 0.0       { vertex_to_slice = v0; clip_of_slice = clip0; vertex_to_stay0 = v1; clip_of_stay0 = clip1; vertex_to_stay1 = v2; clip_of_stay1 = clip2; }
+        else if clip1.z < 0.0  { vertex_to_slice = v1; clip_of_slice = clip1; vertex_to_stay0 = v0; clip_of_stay0 = clip0; vertex_to_stay1 = v2; clip_of_stay1 = clip2; }
+        else                   { vertex_to_slice = v2; clip_of_slice = clip2; vertex_to_stay0 = v1; clip_of_stay0 = clip1; vertex_to_stay1 = v0; clip_of_stay1 = clip0; }
 
-        // println!("{:?}", vertex_to_slice.pos);
-        // println!("{:?}", vertex_to_stay0.pos);
-        // println!("{:?}", vertex_to_stay1.pos);
+        // Calculating new vertices
+        let coef0 = clip_of_stay0.z / (clip_of_stay0.z - clip_of_slice.z);
+        let coef1 = clip_of_stay1.z / (clip_of_stay1.z - clip_of_slice.z);
 
-        let value_difference_in_vertecis0 = vertex_to_slice - vertex_to_stay0;
-        let value_difference_in_vertecis1 = vertex_to_slice - vertex_to_stay1;
+        let mut new_vertex0 = vertex_to_stay0 + (vertex_to_slice - vertex_to_stay0) * coef0;
+        let mut new_vertex1 = vertex_to_stay1 + (vertex_to_slice - vertex_to_stay1) * coef1;
 
-        let coef0 = vertex_to_stay0.pos.z / (vertex_to_slice.pos.z - vertex_to_stay0.pos.z).abs();
-        let coef1 = vertex_to_stay1.pos.z / (vertex_to_slice.pos.z - vertex_to_stay1.pos.z).abs();
-
-        let mut new_vertex0 = vertex_to_stay0 + value_difference_in_vertecis0 * coef0;
-        let mut new_vertex1 = vertex_to_stay1 + value_difference_in_vertecis1 * coef1;
-
-        
-        println!("{} + {} * {}", vertex_to_stay0.pos, value_difference_in_vertecis0.pos, coef0);
-        //println!("=  {}", new_vertex0.pos);
-        //println!("{} + {} * {}", vertex_to_stay1.pos, value_difference_in_vertecis1.pos, coef1);
+        let new_clip0 = *mvp * Vec4::from((new_vertex0.pos, 1.0));
+        let new_clip1 = *mvp * Vec4::from((new_vertex1.pos, 1.0));
 
 
-        vertex_to_stay0.pos = vertex_to_stay0.pos * rec_of_stay0;
-        vertex_to_stay1.pos = vertex_to_stay0.pos * rec_of_stay1;
-        new_vertex0.pos = new_vertex0.pos * (rec_of_slice * coef0);
-        new_vertex1.pos = new_vertex1.pos * (rec_of_slice * coef1);
+        // Deviding by homogenyous coordinates
+        let rec_stay0 = 1.0 / clip_of_stay0.w;
+        vertex_to_stay0 = vertex_to_stay0 * rec_stay0;
+        vertex_to_stay0.pos = clip_of_stay0.xyz() * rec_stay0;
+
+        let rec_stay1 = 1.0 / clip_of_stay1.w;
+        vertex_to_stay1 = vertex_to_stay1 * rec_stay1;
+        vertex_to_stay1.pos = clip_of_stay1.xyz() * rec_stay1;
+
+        let rec_new0 = 1.0 / new_clip0.w;
+        new_vertex0 = new_vertex0 * rec_new0;
+        new_vertex0.pos = new_clip0.xyz() * rec_new0;
+
+        let rec_new1 = 1.0 / new_clip1.w;
+        new_vertex1 = new_vertex1 * rec_new1;
+        new_vertex1.pos = new_clip1.xyz() * rec_new1;
 
 
-        draw_triangle(buffer, vertex_to_stay0, vertex_to_stay1, new_vertex0, rec0, rec1, rec2, texture, viewport_size, mvp);
-        draw_triangle(buffer, new_vertex1, vertex_to_stay1, new_vertex0, rec0, rec1, rec2, texture, viewport_size, mvp);
+        draw_triangle(
+            buffer,
+            z_buffer,
+            new_vertex0,
+            vertex_to_stay0,
+            new_vertex1,
+            rec_new0,
+            rec_stay0,
+            rec_new1,
+            texture,
+            viewport_size,
+            mvp);
+
+        draw_triangle(
+            buffer,
+            z_buffer,
+            vertex_to_stay1,
+            vertex_to_stay0,
+            new_vertex1,
+            rec_stay1,
+            rec_stay0,
+            rec_new1,
+            texture,
+            viewport_size,
+            mvp);
     }
     else
     {
-        let vertex_to_slice0: Vertex;
-        let vertex_to_slice1: Vertex;
-        let vertex_to_stay:   Vertex;
+        let mut vertex_to_stay: Vertex;
+        let     clip_of_stay: Vec4;
+        let     vertex_to_slice0: Vertex;
+        let     clip_of_slice0: Vec4;
+        let     vertex_to_slice1: Vertex;
+        let     clip_of_slice1: Vec4;
 
-        if v0.pos.z >= 0.0      { vertex_to_stay = v0; vertex_to_slice0 = v1; vertex_to_slice1 = v2;}
-        else if v1.pos.z >= 0.0 { vertex_to_stay = v1; vertex_to_slice0 = v0; vertex_to_slice1 = v2;}
-        else                    { vertex_to_stay = v2; vertex_to_slice0 = v1; vertex_to_slice1 = v0;}
+        // Checking which vertex is inside our clip space
+        if clip0.z > 0.0       { vertex_to_stay = v0; clip_of_stay = clip0; vertex_to_slice0 = v1; clip_of_slice0 = clip1; vertex_to_slice1 = v2; clip_of_slice1 = clip2; }
+        else if clip1.z > 0.0  { vertex_to_stay = v1; clip_of_stay = clip1; vertex_to_slice0 = v0; clip_of_slice0 = clip0; vertex_to_slice1 = v2; clip_of_slice1 = clip2; }
+        else                   { vertex_to_stay = v2; clip_of_stay = clip2; vertex_to_slice0 = v1; clip_of_slice0 = clip1; vertex_to_slice1 = v0; clip_of_slice1 = clip0; }
 
-        let value_difference_in_vertecis0 = vertex_to_slice0 - vertex_to_stay;
-        let value_difference_in_vertecis1 = vertex_to_slice1 - vertex_to_stay;
+        // Calculating new vertices
+        let coef0 = clip_of_stay.z / (clip_of_stay.z - clip_of_slice0.z);
+        let coef1 = clip_of_stay.z / (clip_of_stay.z - clip_of_slice1.z);
 
-        let coef0 = (vertex_to_slice0.pos.z - vertex_to_stay.pos.z).abs() / vertex_to_stay.pos.z;
-        let coef1 = (vertex_to_slice1.pos.z - vertex_to_stay.pos.z).abs() / vertex_to_stay.pos.z;
+        let mut new_vertex0 = vertex_to_stay + (vertex_to_slice0 - vertex_to_stay) * coef0;
+        let mut new_vertex1 = vertex_to_stay + (vertex_to_slice1 - vertex_to_stay) * coef1;
 
-        let new_vertex0 = vertex_to_stay + value_difference_in_vertecis0 * coef0;
-        let new_vertex1 = vertex_to_stay + value_difference_in_vertecis1 * coef1;
+        let new_clip0 = *mvp * Vec4::from((new_vertex0.pos, 1.0));
+        let new_clip1 = *mvp * Vec4::from((new_vertex1.pos, 1.0));
 
-        draw_triangle(buffer, new_vertex0, new_vertex1, vertex_to_stay, rec0, rec1, rec2, texture, viewport_size, mvp);
+
+        // Deviding by homogenyous coordinates
+        let rec_stay0 = 1.0 / clip_of_stay.w;
+        vertex_to_stay = vertex_to_stay * rec_stay0;
+        vertex_to_stay.pos = clip_of_stay.xyz() * rec_stay0;
+
+        let rec_new0 = 1.0 / new_clip0.w;
+        new_vertex0 = new_vertex0 * rec_new0;
+        new_vertex0.pos = new_clip0.xyz() * rec_new0;
+
+        let rec_new1 = 1.0 / new_clip1.w;
+        new_vertex1 = new_vertex1 * rec_new1;
+        new_vertex1.pos = new_clip1.xyz() * rec_new1;
+
+
+        draw_triangle(
+            buffer,
+            z_buffer,
+            new_vertex0,
+            vertex_to_stay,
+            new_vertex1,
+            rec_new0,
+            rec_stay0,
+            rec_new1,
+            texture,
+            viewport_size,
+            mvp);
     }
-
-    //draw_triangle(buffer, clip_tri.v0, clip_tri.v1, clip_tri.v2, texture, viewport_size, mvp);
-
-    // match clip_cull_triangle(&clip_tri) {
-    //     ClipResult::None => {}
-    //     ClipResult::One(tri) => {
-    //         raster_clipped_triangle(&tri, texture, buffer, z_buffer, viewport_size);
-    //     }
-    //     ClipResult::Two(tri) => {
-    //         raster_clipped_triangle(&tri.0, texture, buffer, z_buffer, viewport_size);
-    //         raster_clipped_triangle(&tri.1, texture, buffer, z_buffer, viewport_size);
-    //     }
-    // }
 }
 
 pub fn raster_mesh(
@@ -264,6 +310,7 @@ pub fn raster_mesh(
     mvp: &Mat4,
     texture: &Texture,
     buffer: &mut Vec<u32>,
+    z_buffer: &mut Vec<f32>,
     viewport_size: Vec2,
 ) {
     for triangle in mesh.triangles() {
@@ -275,6 +322,7 @@ pub fn raster_mesh(
             mvp,
             texture,
             buffer,
+            z_buffer,
             viewport_size,
         );
     }
@@ -282,6 +330,7 @@ pub fn raster_mesh(
 
 pub fn draw_triangle(
     buffer: &mut Vec<u32>,
+    z_buffer: &mut Vec<f32>,
     clipped_v0: Vertex,
     clipped_v1: Vertex,
     clipped_v2: Vertex,
@@ -292,24 +341,6 @@ pub fn draw_triangle(
     viewport_size: glam::Vec2,
     _mvp: &glam::Mat4, )
 {
-    // let rec0 = 1.0 / clip0.w;
-    // let rec1 = 1.0 / clip1.w;
-    // let rec2 = 1.0 / clip2.w;
-
-    // v0 = v0 * rec0;
-    // v1 = v1 * rec1;
-    // v2 = v2 * rec2;
-
-    //if clip0.z < 0.0 && clip1.z < 0.0 && clip2.z < 0.0 { return; }
-
-    // This would be the output of the vertex shader (clip space)
-    // then we perform perspective division to transform in ndc
-    // now x,y,z componend of ndc are between -1 and 1
-    // perspective division on all attributes
-    
-
-    println!("{}, {}, {}", clipped_v0.pos, clipped_v1.pos, clipped_v2.pos);
-
     // screeen coordinates remapped to window
     let sc0 = glam::vec2(
         map_to_range(clipped_v0.pos.x, -1.0, 1.0, 0.0, viewport_size.x),
@@ -362,7 +393,7 @@ pub fn draw_triangle(
     }
 
     let min_x = (sc0.x.min(sc1.x.min(sc2.x)) as usize).max(0);
-    let max_x = (sc0.x.max(sc1.x.max(sc2.x)) as usize).min(WIDTH);
+    let max_x = (sc0.x.max(sc1.x.max(sc2.x)) as usize).min(WIDTH - 1) + 1;
 
 
     let reversed_global_area = 1.0 / get_doubled_triangle_area(sc0, sc1, sc2);
@@ -386,7 +417,8 @@ pub fn draw_triangle(
                 let temporal_value = a*x_f32 - c;
                 while (b*y_f32 + temporal_value).signum() != b.signum() && (b*y_f32 + temporal_value != 0.0) && y_usize < HEIGHT{
                     let index = coords_to_index(x_usize, y_usize, WIDTH);
-                    draw_pixel(buffer, index, x_f32, y_f32, sc0, sc1, sc2, clipped_v0, clipped_v1, clipped_v2, rec0, rec1, rec2, reversed_global_area, texture);
+                    
+                    draw_pixel(buffer, z_buffer, index, x_f32, y_f32, sc0, sc1, sc2, clipped_v0, clipped_v1, clipped_v2, rec0, rec1, rec2, reversed_global_area, texture);
                     y_f32 += 1.0;
                     y_usize += 1;
                 }
@@ -409,7 +441,8 @@ pub fn draw_triangle(
 
                 while (b*y_f32 + temporal_value).signum() == b.signum() && (b*y_f32 + temporal_value != 0.0) && y_usize > 0{
                     let index = coords_to_index(x_usize, y_usize, WIDTH);
-                    draw_pixel(buffer, index, x_f32, y_f32, sc0, sc1, sc2, clipped_v0, clipped_v1, clipped_v2, rec0, rec1, rec2, reversed_global_area, texture);
+                    
+                    draw_pixel(buffer, z_buffer, index, x_f32, y_f32, sc0, sc1, sc2, clipped_v0, clipped_v1, clipped_v2, rec0, rec1, rec2, reversed_global_area, texture);
                     y_f32 -= 1.0;
                     y_usize -= 1;
                 }
@@ -426,15 +459,16 @@ pub fn draw_triangle(
                 let mut y_f32 = find_maximal_y(pivot_line0, pivot_line1, x_f32);
 
                 
-                y_f32 -= 0.5;
+                y_f32 -= 0.500001;
                 y_f32 = y_f32.round();
 
                 let mut y_usize = y_f32 as usize;
 
                 let temporal_value = a*x_f32 - c;
-                while (b*y_f32 + temporal_value).signum() != b.signum() && (b*y_f32 + temporal_value != 0.0) {
+                while (b*y_f32 + temporal_value).signum() != b.signum() && (b*y_f32 + temporal_value != 0.0) && y_usize < HEIGHT{
                     let index = coords_to_index(x_usize, y_usize, WIDTH);
-                    draw_pixel(buffer, index, x_f32, y_f32, sc0, sc1, sc2, clipped_v0, clipped_v1, clipped_v2, rec0, rec1, rec2, reversed_global_area, texture);
+                    
+                    draw_pixel(buffer, z_buffer, index, x_f32, y_f32, sc0, sc1, sc2, clipped_v0, clipped_v1, clipped_v2, rec0, rec1, rec2, reversed_global_area, texture);
                     y_f32 += 1.0;
                     y_usize += 1;
                 }
@@ -455,9 +489,10 @@ pub fn draw_triangle(
 
                 let temporal_value = a*x_f32 - c;
 
-                while (b*y_f32 + temporal_value).signum() == b.signum() && (b*y_f32 + temporal_value != 0.0) {
+                while (b*y_f32 + temporal_value).signum() == b.signum() && (b*y_f32 + temporal_value != 0.0) && y_usize > 0{
                     let index = coords_to_index(x_usize, y_usize, WIDTH);
-                    draw_pixel(buffer, index, x_f32, y_f32, sc0, sc1, sc2, clipped_v0, clipped_v1, clipped_v2, rec0, rec1, rec2, reversed_global_area, texture);
+                    
+                    draw_pixel(buffer, z_buffer, index, x_f32, y_f32, sc0, sc1, sc2, clipped_v0, clipped_v1, clipped_v2, rec0, rec1, rec2, reversed_global_area, texture);
                     y_f32 -= 1.0;
                     y_usize -= 1;
                 }
@@ -504,6 +539,7 @@ pub fn find_maximal_y(line0: (f32, f32, f32), line1: (f32, f32, f32), x: f32) ->
 
 fn main() {
     let mut buffer: Vec<u32> = vec![0; WIDTH * HEIGHT];
+    let mut z_buffer: Vec<f32> = vec![1.0; WIDTH * HEIGHT];
 
     let mut window = Window::new(
         "Test - ESC to exit",
@@ -515,32 +551,8 @@ fn main() {
         panic!("Window failed to load.\nCaused error: {}", e);
     });
 
-    let v0 = Vertex {
-        pos: glam::vec3(-1.0, 1.0, 0.0),
-        normal: glam::vec3(0.0, 1.0, 0.0),
-        c: glam::vec3(255.0, 235.0, 59.0),
-        uv: glam::vec2(1.0, 0.0),
-    };
-    let v1 = Vertex {
-        pos: glam::vec3(1.0, 1.0, 0.0),
-        normal: glam::vec3(0.0, 1.0, 0.0),
-        c: glam::vec3(0.0, 255.0, 0.0),
-        uv: glam::vec2(0.0, 0.0)
-    };
-    let v2 = Vertex {
-        pos: glam::vec3(-1.0, -1.0, 0.0),
-        normal: glam::vec3(0.0, 1.0, 0.0),
-        c: glam::vec3(0.0, 0.0, 255.0),
-        uv: glam::vec2(1.0, 1.0)
-    };
-    // let v3 = Vertex {
-    //     pos: glam::vec3(1.0, -1.0, 0.0),
-    //     normal: glam::vec3(0.0, 1.0, 0.0),
-    //     c: glam::vec3(0.0, 0.0, 255.0),
-    //     uv: glam::vec2(0.0, 1.0)
-    // };
 
-    let aspect_ratio = WIDTH as f32 / HEIGHT as f32;
+    let aspect_ratio = WIDTH_F / HEIGHT_F;
 
     let mut camera = Camera {
         aspect_ratio,
@@ -549,14 +561,12 @@ fn main() {
         ..Default::default()
     };
 
-    // let mesh = load_gltf(Path::new("assets/helmet.gltf"));
+    let mesh = load_gltf(Path::new("assets/helmet.gltf"));
     //let mesh = load_gltf(Path::new("assets/cube.gltf"));
 
     let transform_of_go = Transform::from_rotation(glam::Quat::from_euler(glam::EulerRot::XYZ, 0.0, 0.0, 0.0));
 
-    //camera.transform.translation = glam::vec3(1.0, 1.0, 1.0);
-
-    // let texture = Texture::load(Path::new("assets/bojan.jpg"));
+    //let texture = Texture::load(Path::new("assets/bojan.jpg"));
     let texture = Texture::load(Path::new("assets/albedo.jpg"));
 
     let window_size = glam::vec2(WIDTH as f32, HEIGHT as f32);
@@ -575,21 +585,17 @@ fn main() {
 
         handle_camera(&mut camera, &window, &mut mouse_pos, dt);
         clear_buffer(&mut buffer);
-        raster_triangle(
-            v0, v1, v2, &(camera.projection() * camera.view() * transform_of_go.local()), &texture, &mut buffer, window_size
-        );
-        // raster_triangle(
-        //     v1, v2, v3, &(camera.projection() * camera.view() * transform_of_go.local()), &texture, &mut buffer, window_size
-        // );
+        clear_z_buffer(&mut z_buffer);
 
-        // raster_mesh(
-        //     &mesh,
-        //     &transform_of_go.local(),
-        //     &(camera.projection() * camera.view() * transform_of_go.local()),
-        //     &texture,
-        //     &mut buffer,
-        //     window_size,
-        // );
+        raster_mesh(
+            &mesh,
+            &transform_of_go.local(),
+            &(camera.projection() * camera.view() * transform_of_go.local()),
+            &texture,
+            &mut buffer,
+            &mut z_buffer,
+            window_size,
+        );
 
         window.update_with_buffer(&buffer, WIDTH, HEIGHT).unwrap();
     }

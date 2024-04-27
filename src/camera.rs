@@ -21,7 +21,7 @@ impl Default for Camera {
             aspect_ratio: 1.0,
             transform: Transform::IDENTITY,
             speed: 1.0,
-            sens: 1.0
+            sens: 1.5
         }
     }
 }
