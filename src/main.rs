@@ -551,30 +551,6 @@ fn main() {
         panic!("Window failed to load.\nCaused error: {}", e);
     });
 
-    let v0 = Vertex {
-        pos: glam::vec3(-1.0, 1.0, 0.0),
-        normal: glam::vec3(0.0, 1.0, 0.0),
-        c: glam::vec3(255.0, 235.0, 59.0),
-        uv: glam::vec2(1.0, 0.0),
-    };
-    let v1 = Vertex {
-        pos: glam::vec3(1.0, 1.0, 0.0),
-        normal: glam::vec3(0.0, 1.0, 0.0),
-        c: glam::vec3(0.0, 255.0, 0.0),
-        uv: glam::vec2(0.0, 0.0)
-    };
-    let v2 = Vertex {
-        pos: glam::vec3(-1.0, -1.0, 0.0),
-        normal: glam::vec3(0.0, 1.0, 0.0),
-        c: glam::vec3(0.0, 0.0, 255.0),
-        uv: glam::vec2(1.0, 1.0)
-    };
-    let v3 = Vertex {
-        pos: glam::vec3(1.0, -1.0, 0.0),
-        normal: glam::vec3(0.0, 1.0, 0.0),
-        c: glam::vec3(0.0, 0.0, 255.0),
-        uv: glam::vec2(0.0, 1.0)
-    };
 
     let aspect_ratio = WIDTH_F / HEIGHT_F;
 
@@ -589,8 +565,6 @@ fn main() {
     //let mesh = load_gltf(Path::new("assets/cube.gltf"));
 
     let transform_of_go = Transform::from_rotation(glam::Quat::from_euler(glam::EulerRot::XYZ, 0.0, 0.0, 0.0));
-
-    //camera.transform.translation = glam::vec3(1.0, 1.0, 1.0);
 
     //let texture = Texture::load(Path::new("assets/bojan.jpg"));
     let texture = Texture::load(Path::new("assets/albedo.jpg"));
@@ -612,12 +586,6 @@ fn main() {
         handle_camera(&mut camera, &window, &mut mouse_pos, dt);
         clear_buffer(&mut buffer);
         clear_z_buffer(&mut z_buffer);
-        // raster_triangle(
-        //     v0, v1, v2, &(camera.projection() * camera.view() * transform_of_go.local()), &texture, &mut buffer, &mut z_buffer, window_size
-        // );
-        // raster_triangle(
-        //     v1, v2, v3, &(camera.projection() * camera.view() * transform_of_go.local()), &texture, &mut buffer, &mut z_buffer, window_size
-        // );
 
         raster_mesh(
             &mesh,
