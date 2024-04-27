@@ -341,24 +341,6 @@ pub fn draw_triangle(
     viewport_size: glam::Vec2,
     _mvp: &glam::Mat4, )
 {
-    // let rec0 = 1.0 / clip0.w;
-    // let rec1 = 1.0 / clip1.w;
-    // let rec2 = 1.0 / clip2.w;
-
-    // v0 = v0 * rec0;
-    // v1 = v1 * rec1;
-    // v2 = v2 * rec2;
-
-    //if clip0.z < 0.0 && clip1.z < 0.0 && clip2.z < 0.0 { return; }
-
-    // This would be the output of the vertex shader (clip space)
-    // then we perform perspective division to transform in ndc
-    // now x,y,z componend of ndc are between -1 and 1
-    // perspective division on all attributes
-    
-
-    //println!("{}, {}, {}", clipped_v0.pos, clipped_v1.pos, clipped_v2.pos);
-
     // screeen coordinates remapped to window
     let sc0 = glam::vec2(
         map_to_range(clipped_v0.pos.x, -1.0, 1.0, 0.0, viewport_size.x),
@@ -411,7 +393,7 @@ pub fn draw_triangle(
     }
 
     let min_x = (sc0.x.min(sc1.x.min(sc2.x)) as usize).max(0);
-    let max_x = (sc0.x.max(sc1.x.max(sc2.x)) as usize).min(WIDTH-1);
+    let max_x = (sc0.x.max(sc1.x.max(sc2.x)) as usize).min(WIDTH - 1) + 1;
 
 
     let reversed_global_area = 1.0 / get_doubled_triangle_area(sc0, sc1, sc2);
@@ -435,11 +417,7 @@ pub fn draw_triangle(
                 let temporal_value = a*x_f32 - c;
                 while (b*y_f32 + temporal_value).signum() != b.signum() && (b*y_f32 + temporal_value != 0.0) && y_usize < HEIGHT{
                     let index = coords_to_index(x_usize, y_usize, WIDTH);
-                    let mut _a = 0;
-                    if index >= WIDTH * HEIGHT
-                    {
-                        _a = 1;
-                    }
+                    
                     draw_pixel(buffer, z_buffer, index, x_f32, y_f32, sc0, sc1, sc2, clipped_v0, clipped_v1, clipped_v2, rec0, rec1, rec2, reversed_global_area, texture);
                     y_f32 += 1.0;
                     y_usize += 1;
@@ -463,11 +441,7 @@ pub fn draw_triangle(
 
                 while (b*y_f32 + temporal_value).signum() == b.signum() && (b*y_f32 + temporal_value != 0.0) && y_usize > 0{
                     let index = coords_to_index(x_usize, y_usize, WIDTH);
-                    let mut _a = 0;
-                    if index >= WIDTH * HEIGHT
-                    {
-                        _a = 1;
-                    }
+                    
                     draw_pixel(buffer, z_buffer, index, x_f32, y_f32, sc0, sc1, sc2, clipped_v0, clipped_v1, clipped_v2, rec0, rec1, rec2, reversed_global_area, texture);
                     y_f32 -= 1.0;
                     y_usize -= 1;
@@ -493,11 +467,7 @@ pub fn draw_triangle(
                 let temporal_value = a*x_f32 - c;
                 while (b*y_f32 + temporal_value).signum() != b.signum() && (b*y_f32 + temporal_value != 0.0) && y_usize < HEIGHT{
                     let index = coords_to_index(x_usize, y_usize, WIDTH);
-                    let mut _a = 0;
-                    if index >= WIDTH * HEIGHT
-                    {
-                        _a = 1;
-                    }
+                    
                     draw_pixel(buffer, z_buffer, index, x_f32, y_f32, sc0, sc1, sc2, clipped_v0, clipped_v1, clipped_v2, rec0, rec1, rec2, reversed_global_area, texture);
                     y_f32 += 1.0;
                     y_usize += 1;
@@ -521,11 +491,7 @@ pub fn draw_triangle(
 
                 while (b*y_f32 + temporal_value).signum() == b.signum() && (b*y_f32 + temporal_value != 0.0) && y_usize > 0{
                     let index = coords_to_index(x_usize, y_usize, WIDTH);
-                    let mut _a = 0;
-                    if index >= WIDTH * HEIGHT
-                    {
-                        _a = 1;
-                    }
+                    
                     draw_pixel(buffer, z_buffer, index, x_f32, y_f32, sc0, sc1, sc2, clipped_v0, clipped_v1, clipped_v2, rec0, rec1, rec2, reversed_global_area, texture);
                     y_f32 -= 1.0;
                     y_usize -= 1;
@@ -585,30 +551,30 @@ fn main() {
         panic!("Window failed to load.\nCaused error: {}", e);
     });
 
-    // let v0 = Vertex {
-    //     pos: glam::vec3(-1.0, 1.0, 0.0),
-    //     normal: glam::vec3(0.0, 1.0, 0.0),
-    //     c: glam::vec3(255.0, 235.0, 59.0),
-    //     uv: glam::vec2(1.0, 0.0),
-    // };
-    // let v1 = Vertex {
-    //     pos: glam::vec3(1.0, 1.0, 0.0),
-    //     normal: glam::vec3(0.0, 1.0, 0.0),
-    //     c: glam::vec3(0.0, 255.0, 0.0),
-    //     uv: glam::vec2(0.0, 0.0)
-    // };
-    // let v2 = Vertex {
-    //     pos: glam::vec3(-1.0, -1.0, 0.0),
-    //     normal: glam::vec3(0.0, 1.0, 0.0),
-    //     c: glam::vec3(0.0, 0.0, 255.0),
-    //     uv: glam::vec2(1.0, 1.0)
-    // };
-    // let v3 = Vertex {
-    //     pos: glam::vec3(1.0, -1.0, 0.0),
-    //     normal: glam::vec3(0.0, 1.0, 0.0),
-    //     c: glam::vec3(0.0, 0.0, 255.0),
-    //     uv: glam::vec2(0.0, 1.0)
-    // };
+    let v0 = Vertex {
+        pos: glam::vec3(-1.0, 1.0, 0.0),
+        normal: glam::vec3(0.0, 1.0, 0.0),
+        c: glam::vec3(255.0, 235.0, 59.0),
+        uv: glam::vec2(1.0, 0.0),
+    };
+    let v1 = Vertex {
+        pos: glam::vec3(1.0, 1.0, 0.0),
+        normal: glam::vec3(0.0, 1.0, 0.0),
+        c: glam::vec3(0.0, 255.0, 0.0),
+        uv: glam::vec2(0.0, 0.0)
+    };
+    let v2 = Vertex {
+        pos: glam::vec3(-1.0, -1.0, 0.0),
+        normal: glam::vec3(0.0, 1.0, 0.0),
+        c: glam::vec3(0.0, 0.0, 255.0),
+        uv: glam::vec2(1.0, 1.0)
+    };
+    let v3 = Vertex {
+        pos: glam::vec3(1.0, -1.0, 0.0),
+        normal: glam::vec3(0.0, 1.0, 0.0),
+        c: glam::vec3(0.0, 0.0, 255.0),
+        uv: glam::vec2(0.0, 1.0)
+    };
 
     let aspect_ratio = WIDTH_F / HEIGHT_F;
 
@@ -626,8 +592,8 @@ fn main() {
 
     //camera.transform.translation = glam::vec3(1.0, 1.0, 1.0);
 
-    let texture = Texture::load(Path::new("assets/bojan.jpg"));
-    //let texture = Texture::load(Path::new("assets/albedo.jpg"));
+    //let texture = Texture::load(Path::new("assets/bojan.jpg"));
+    let texture = Texture::load(Path::new("assets/albedo.jpg"));
 
     let window_size = glam::vec2(WIDTH as f32, HEIGHT as f32);
 
@@ -647,10 +613,10 @@ fn main() {
         clear_buffer(&mut buffer);
         clear_z_buffer(&mut z_buffer);
         // raster_triangle(
-        //     v0, v1, v2, &(camera.projection() * camera.view() * transform_of_go.local()), &texture, &mut buffer, window_size
+        //     v0, v1, v2, &(camera.projection() * camera.view() * transform_of_go.local()), &texture, &mut buffer, &mut z_buffer, window_size
         // );
         // raster_triangle(
-        //     v1, v2, v3, &(camera.projection() * camera.view() * transform_of_go.local()), &texture, &mut buffer, window_size
+        //     v1, v2, v3, &(camera.projection() * camera.view() * transform_of_go.local()), &texture, &mut buffer, &mut z_buffer, window_size
         // );
 
         raster_mesh(
