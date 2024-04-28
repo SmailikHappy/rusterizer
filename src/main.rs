@@ -2,6 +2,7 @@ use geometry::Mesh;
 use glam::{Vec2, /*Vec3, */Vec4, Mat4};
 //use glam::Vec3Swizzles;
 use glam::Vec4Swizzles;
+//use gltf::json::extensions::mesh;
 use minifb::{Key, Window, WindowOptions, MouseMode};
 use std::path::Path;
 
@@ -22,44 +23,14 @@ pub use transform::Transform;
 pub mod utils;
 use utils::{coords_to_index, map_to_range, /*cofactor,*/ load_gltf};
 
+const MESH_PATH: &str = "assets/helmet.gltf";
+const TEXT_PATH: &str = "assets/albedo.jpg";
 
 const WIDTH: usize = 500;
 const HEIGHT: usize = 500;
-const WIDTH_F: f32 = 500.0;
-const HEIGHT_F: f32 = 500.0;
-//const PI: f32 = 3.14159265359;
+const WIDTH_F: f32 = HEIGHT as f32;
+const HEIGHT_F: f32 = HEIGHT as f32;
 
-/*pub fn find_min(pos0: glam::Vec2, pos1: glam::Vec2, pos2: glam::Vec2) -> (usize, usize) {
-
-    let y_min = pos0.y.min(pos1.y.min(pos2.y));
-    let mut x_min = pos0.x.min(pos1.x.min(pos2.x));
-
-    if y_min == pos0.y && y_min == pos1.y{
-        x_min = pos0.x.min(pos1.x);
-    } else if y_min == pos0.y && y_min == pos2.y{
-        x_min = pos0.x.min(pos2.x);
-    } else if y_min == pos1.y && y_min == pos2.y{
-        x_min = pos1.x.min(pos2.x);
-    }
-
-    (x_min as usize, y_min as usize)
-}
-
-pub fn find_max(pos0: glam::Vec2, pos1: glam::Vec2, pos2: glam::Vec2) -> (usize, usize) {
-
-    let y_max = pos0.y.max(pos1.y.max(pos2.y));
-    let mut x_max = pos0.x.max(pos1.x.max(pos2.x));
-
-    if y_max == pos0.y && y_max == pos1.y{
-        x_max = pos0.x.max(pos1.x);
-    } else if y_max == pos0.y && y_max == pos2.y {
-        x_max = pos0.x.max(pos2.x);
-    } else if y_max == pos1.y && y_max == pos2.y {
-        x_max = pos1.x.max(pos2.x);
-    }
-
-    (x_max as usize, y_max as usize)
-}*/
 
 pub fn clear_buffer(buffer: &mut Vec<u32>) {
     let length = buffer.len();
@@ -406,6 +377,8 @@ pub fn draw_triangle(
         {
             for x_usize in min_x..max_x
             {
+                if x_usize >= WIDTH { continue; }
+
                 let x_f32 = x_usize as f32 - 0.5;
                 let mut y_f32 = find_maximal_y(pivot_line0, pivot_line1, x_f32).max(0.0);
                 
@@ -428,6 +401,8 @@ pub fn draw_triangle(
         {
             for x_usize in min_x..max_x
             {
+                if x_usize >= WIDTH { continue; }
+
                 let x_f32 = x_usize as f32 - 0.5;
                 let mut y_f32 = find_minimal_y(pivot_line0, pivot_line1, x_f32).min(HEIGHT_F - 1.0);
 
@@ -455,6 +430,8 @@ pub fn draw_triangle(
         {
             for x_usize in min_x..max_x
             {
+                if x_usize >= WIDTH { continue; }
+
                 let x_f32 = x_usize as f32 - 0.5;
                 let mut y_f32 = find_maximal_y(pivot_line0, pivot_line1, x_f32);
 
@@ -478,6 +455,8 @@ pub fn draw_triangle(
         {
             for x_usize in min_x..max_x
             {
+                if x_usize >= WIDTH { continue; }
+
                 let x_f32 = x_usize as f32 - 0.5;
                 let mut y_f32 = find_minimal_y(pivot_line0, pivot_line1, x_f32);
 
@@ -561,17 +540,15 @@ fn main() {
         ..Default::default()
     };
 
-    let mesh = load_gltf(Path::new("assets/helmet.gltf"));
-    //let mesh = load_gltf(Path::new("assets/cube.gltf"));
+    let mesh = load_gltf(Path::new(MESH_PATH));
 
     let transform_of_go = Transform::from_rotation(glam::Quat::from_euler(glam::EulerRot::XYZ, 0.0, 0.0, 0.0));
 
-    //let texture = Texture::load(Path::new("assets/bojan.jpg"));
-    let texture = Texture::load(Path::new("assets/albedo.jpg"));
+    let texture = Texture::load(Path::new(TEXT_PATH));
 
     let window_size = glam::vec2(WIDTH as f32, HEIGHT as f32);
 
-    let mut mouse_pos = (WIDTH as f32 / 2.0, HEIGHT as f32 / 2.0);
+    let mut mouse_pos = (WIDTH_F / 2.0, HEIGHT_F / 2.0);
     
     // Limit to max ~60 fps update rate
     window.limit_update_rate(Some(std::time::Duration::from_micros(16600)));
